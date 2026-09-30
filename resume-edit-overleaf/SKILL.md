@@ -1,5 +1,5 @@
 ---
-name: resume-overleaf-publish
+name: resume-edit-overleaf
 description: Edit a LaTeX resume in the user's project, preserve its existing formatting, compile and visually check the one-page PDF, then commit and push the requested resume changes to Overleaf. Use for explicit resume edits or Overleaf publishing requests.
 ---
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "简历修改并推送 Overleaf"
+  short_description: "修改 LaTeX 简历、编译检查并推送"
+  default_prompt: "使用 $resume-edit-overleaf 按要求修改简历源文件，检查一页排版，并在明确要求时提交到 Overleaf。"

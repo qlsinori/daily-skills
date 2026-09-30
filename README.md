@@ -3,8 +3,8 @@
 
 ## Skills
 
-- `skills/feishu-vln-project-summary`：只读遍历飞书 Wiki，筛选端到端 VLN 工作，整理来源、时间和简历素材。
-- `skills/resume-overleaf-publish`：修改 LaTeX 简历，编译检查一页排版，并在明确要求时推送到 Overleaf。
+- `feishu-vln-project-summary`：只读遍历飞书 Wiki，筛选端到端 VLN 工作，整理来源、时间和简历素材。
+- `resume-edit-overleaf`：修改 LaTeX 简历，编译检查一页排版，并在明确要求时推送到 Overleaf。
 
 ## 维护约定
 
