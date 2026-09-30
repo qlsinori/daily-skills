@@ -1,0 +1,6 @@
+interface:
+  display_name: "语义地图建图问题提取"
+  short_description: "提取建图测试问题、原话、解法与截图"
+  default_prompt: "使用 $lark-semantic-map-issue-extractor 按上次时间水位提取新增或变化的建图问题，去重并增量更新指定文档末尾的常见问题，保留原话和原图，维护开头的跳转链接。"
+policy:
+  allow_implicit_invocation: true

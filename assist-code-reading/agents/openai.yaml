@@ -1,0 +1,6 @@
+interface:
+  display_name: "辅助代码阅读"
+  short_description: "按真实调用链生成中文训练与推理代码阅读文档"
+  default_prompt: "Use $assist-code-reading to build a code-reading guide from this repository's training and inference entry points."
+policy:
+  allow_implicit_invocation: true
