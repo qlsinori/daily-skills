@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feishu VLN 项目总结"
+  short_description: "只读检索飞书并整理端到端 VLN 项目"
+  default_prompt: "使用 $feishu-vln-project-summary 读取飞书 Wiki 项目树，筛选端到端 VLN 工作并整理来源、时间和简历素材。"
