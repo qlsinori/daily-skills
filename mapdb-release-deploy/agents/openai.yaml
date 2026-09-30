@@ -1,0 +1,4 @@
+interface:
+  display_name: "MapDB Release & Deploy"
+  short_description: "Test, tag, publish, deploy, and verify Semantic MapDB"
+  default_prompt: "Use $mapdb-release-deploy to validate the current MapDB changes, publish a semantic-version tag to GitLab, wait for deployment, and verify production."
