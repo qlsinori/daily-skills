@@ -1,0 +1,6 @@
+interface:
+  display_name: "图文 SOP 编写"
+  short_description: "从截图和操作流程生成可执行 SOP 文档"
+  default_prompt: "Use $sop-documentation to turn the provided screenshots and workflow into a concise, image-aligned SOP."
+policy:
+  allow_implicit_invocation: true
