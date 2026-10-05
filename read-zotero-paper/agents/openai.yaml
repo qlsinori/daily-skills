@@ -1,0 +1,4 @@
+interface:
+  display_name: "Zotero 论文精读与中文批注"
+  short_description: "精读论文，生成中文解析及美观的 Zotero 可读批注 PDF"
+  default_prompt: "使用 $read-zotero-paper 精读这篇论文，生成中文分析并制作美观、可在 Zotero 中查看的批注版 PDF。"

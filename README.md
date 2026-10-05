@@ -13,6 +13,7 @@
 | [`mapdb-project-development`](mapdb-project-development/) | MapDB 项目开发、数据保护、隔离测试与交付约束 |
 | [`mapdb-release-deploy`](mapdb-release-deploy/) | MapDB 版本发布、GitLab 标记、流水线和部署验证 |
 | [`report`](report/) | 汇总指定时间范围内的 Codex 工作记录 |
+| [`read-zotero-paper`](read-zotero-paper/) | 精读 Zotero 论文，生成中文分析与可读批注 PDF |
 | [`resume-edit-overleaf`](resume-edit-overleaf/) | 修改、编译并检查 LaTeX 简历，按要求推送到 Overleaf |
 | [`sop-documentation`](sop-documentation/) | 根据截图和操作流程生成图文 SOP，支持飞书 Markdown / Word |
 
