@@ -1,0 +1,4 @@
+interface:
+  display_name: "MapDB 持续发布规范"
+  short_description: "启用后持续执行修改测试、同步 develop、打新 tag 和核验 157 部署"
+  default_prompt: "使用 $mapdb-session-autorelease 启用本项目持续发布规范，后续修改按规范测试并发布，直到我明确关闭。"
