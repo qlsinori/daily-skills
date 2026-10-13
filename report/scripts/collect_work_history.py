@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Collect a date-bounded, deduplicated digest of local Codex sessions."""
+"""Collect a date-bounded, deduplicated digest of Codex and Cursor work."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import re
+import shlex
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timezone
@@ -38,6 +40,8 @@ class Session:
     models: list[str] = field(default_factory=list)
     messages: list[Message] = field(default_factory=list)
     duplicates: list[str] = field(default_factory=list)
+    source: str = "codex"
+    source_path: str = ""
 
     @property
     def user_messages(self) -> list[Message]:
@@ -48,7 +52,8 @@ class Session:
         return [
             message
             for message in self.messages
-            if message.role == "assistant" and message.phase == "final_answer"
+            if message.role == "assistant"
+            and message.phase in {"final_answer", "cursor_outcome"}
         ]
 
 
@@ -66,6 +71,45 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--session-id", action="append", default=[])
     parser.add_argument("--format", choices=("markdown", "json"), default="markdown")
     parser.add_argument("--detail", choices=("digest", "full"), default="digest")
+    parser.add_argument(
+        "--include-cursor",
+        action="store_true",
+        help="Include matching local Cursor transcripts and remote Cursor roots.",
+    )
+    parser.add_argument(
+        "--cursor-root",
+        action="append",
+        default=[],
+        help="Local Cursor project root; may be repeated.",
+    )
+    parser.add_argument(
+        "--remote-host",
+        action="append",
+        default=[],
+        help="SSH host to inspect for Cursor transcripts; may be repeated.",
+    )
+    parser.add_argument(
+        "--all-ssh-hosts",
+        action="store_true",
+        help="Inspect every concrete host listed in --ssh-config.",
+    )
+    parser.add_argument(
+        "--ssh-config",
+        default=str(Path.home() / ".ssh" / "config"),
+        help="SSH config used by --all-ssh-hosts and remote collection.",
+    )
+    parser.add_argument(
+        "--remote-cursor-root",
+        action="append",
+        default=["~/.cursor/projects", "~/.codex/sessions"],
+        help="Remote root to inspect; may be repeated.",
+    )
+    parser.add_argument(
+        "--semantic-keyword",
+        action="append",
+        default=[],
+        help="Additional semantic-map keyword; may be repeated.",
+    )
     parser.add_argument("--output", help="Write output to this file instead of stdout")
     return parser.parse_args()
 
@@ -182,6 +226,335 @@ def read_session(
     return session
 
 
+SEMANTIC_KEYWORDS = (
+    "语义地图",
+    "语义建图",
+    "semantic map",
+    "semantic_mapping",
+    "semantic-mapping",
+    "memory_module",
+    "hydra_custom",
+    "建图服务",
+    "mapdb",
+)
+CURSOR_FILE_SUFFIXES = {".jsonl", ".md", ".txt"}
+DATE_MARKER = re.compile(r"(?<!\d)(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)")
+NATURAL_DATE_MARKER = re.compile(
+    r"<timestamp>[^,]+,\s*([A-Z][a-z]{2})\s+(\d{1,2}),\s*(20\d{2})"
+)
+MONTHS = {name: index for index, name in enumerate(
+    ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"),
+    start=1,
+)}
+
+
+def semantic_keywords(args: argparse.Namespace) -> tuple[str, ...]:
+    return tuple(dict.fromkeys((*SEMANTIC_KEYWORDS, *args.semantic_keyword)))
+
+
+def default_cursor_roots() -> list[Path]:
+    candidates = [Path.home() / ".cursor" / "projects"]
+    return [path for path in candidates if path.is_dir()]
+
+
+def marker_dates(text: str) -> list[date]:
+    dates: list[date] = []
+    for year, month, day in DATE_MARKER.findall(text):
+        try:
+            dates.append(date(int(year), int(month), int(day)))
+        except ValueError:
+            continue
+    for month, day, year in NATURAL_DATE_MARKER.findall(text):
+        try:
+            dates.append(date(int(year), MONTHS[month], int(day)))
+        except (KeyError, ValueError):
+            continue
+    return dates
+
+
+def in_date_range(
+    text: str, modified_at: datetime, start_at: datetime, end_at: datetime
+) -> bool:
+    if start_at <= modified_at <= end_at:
+        return True
+    return any(start_at.date() <= item <= end_at.date() for item in marker_dates(text))
+
+
+def cursor_message_timestamp(
+    text: str, fallback: datetime, start_at: datetime, end_at: datetime
+) -> datetime:
+    for candidate in marker_dates(text):
+        # A transcript may quote older work. Prefer a marker inside the report
+        # window and otherwise use the file timestamp as the best evidence.
+        if start_at.date() <= candidate <= end_at.date():
+            return datetime.combine(candidate, time.min, fallback.tzinfo)
+    return fallback
+
+
+def cursor_text_from_item(item: object) -> str:
+    if not isinstance(item, dict):
+        return ""
+    message = item.get("message") if isinstance(item.get("message"), dict) else item
+    if not isinstance(message, dict):
+        return ""
+    return message_text(message.get("content"))
+
+
+def cursor_project_name(path: str) -> str:
+    parts = Path(path).parts
+    if "projects" in parts:
+        index = parts.index("projects")
+        if index + 1 < len(parts):
+            return parts[index + 1]
+    return Path(path).stem
+
+
+def cursor_session_id(path: Path, source: str) -> str:
+    parts = path.parts
+    try:
+        index = parts.index("agent-transcripts")
+    except ValueError:
+        return f"cursor:{source}:{infer_id(path)}"
+    # Compaction segments belong to the root transcript. Subagent transcripts
+    # keep their own id because they are separate work branches.
+    if "subagents" in parts[index + 1 :]:
+        identifier = infer_id(path)
+    elif index + 1 < len(parts):
+        identifier = parts[index + 1]
+    else:
+        identifier = infer_id(path)
+    return f"cursor:{source}:{identifier}"
+
+
+def read_cursor_file(
+    path: Path,
+    source: str,
+    start_at: datetime,
+    end_at: datetime,
+    keywords: tuple[str, ...],
+    content_override: str | None = None,
+    modified_override: float | None = None,
+) -> Session | None:
+    try:
+        content = content_override if content_override is not None else path.read_text(
+            encoding="utf-8", errors="ignore"
+        )
+        modified_at = datetime.fromtimestamp(
+            modified_override if modified_override is not None else path.stat().st_mtime,
+            tz=start_at.tzinfo,
+        )
+    except OSError:
+        return None
+    if not in_date_range(content, modified_at, start_at, end_at):
+        return None
+    lowered = content.casefold()
+    if not any(keyword.casefold() in lowered for keyword in keywords):
+        return None
+
+    messages: list[Message] = []
+    if path.suffix.casefold() == ".jsonl":
+        for line in content.splitlines():
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            role = item.get("role") if isinstance(item, dict) else None
+            if role not in {"user", "assistant"}:
+                continue
+            text_value = cursor_text_from_item(item)
+            if not text_value:
+                continue
+            timestamp = cursor_message_timestamp(text_value, modified_at, start_at, end_at)
+            if not (start_at <= timestamp <= end_at):
+                continue
+            messages.append(
+                Message(
+                    timestamp=timestamp,
+                    role=role,
+                    phase="cursor_outcome" if role == "assistant" else "cursor_request",
+                    text=text_value,
+                )
+            )
+    else:
+        messages.append(
+            Message(
+                timestamp=modified_at,
+                role="assistant",
+                phase="cursor_outcome",
+                text=content,
+            )
+        )
+    if not messages:
+        return None
+
+    # Cursor transcripts contain progress/tool chatter. Keep the requests and
+    # the most recent outcome evidence in the digest while preserving full mode.
+    user_messages = [item for item in messages if item.role == "user"][-20:]
+    assistant_messages = [item for item in messages if item.role == "assistant"][-8:]
+    kept = sorted(user_messages + assistant_messages, key=lambda item: item.timestamp)
+    session_id = cursor_session_id(Path(path), source)
+    return Session(
+        session_id=session_id,
+        path=Path(path),
+        title=f"Cursor · {cursor_project_name(path)}",
+        cwd=cursor_project_name(path),
+        messages=kept,
+        source="cursor",
+        source_path=str(path),
+    )
+
+
+def collect_local_cursor(
+    roots: Iterable[Path], start_at: datetime, end_at: datetime, keywords: tuple[str, ...]
+) -> list[Session]:
+    sessions: list[Session] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for path in sorted(root.rglob("*")):
+            if not path.is_file() or path.suffix.casefold() not in CURSOR_FILE_SUFFIXES:
+                continue
+            if "agent-transcripts" not in path.parts:
+                continue
+            session = read_cursor_file(path, "local", start_at, end_at, keywords)
+            if session is not None:
+                sessions.append(session)
+    return sessions
+
+
+REMOTE_CURSOR_SCRIPT = r'''import datetime, json, os, re, sys
+payload = json.load(sys.stdin)
+start = datetime.date.fromisoformat(payload["start"])
+end = datetime.date.fromisoformat(payload["end"])
+keywords = [item.casefold() for item in payload["keywords"]]
+date_marker = re.compile(r"(?<!\d)(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})(?!\d)")
+natural_marker = re.compile(r"<timestamp>[^,]+,\s*([A-Z][a-z]{2})\s+(\d{1,2}),\s*(20\d{2})")
+months = {name: index for index, name in enumerate(("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"), start=1)}
+suffixes = {".jsonl", ".md", ".txt"}
+def date_hits(text):
+    for year, month, day in date_marker.findall(text):
+        try:
+            yield datetime.date(int(year), int(month), int(day))
+        except ValueError:
+            pass
+    for month, day, year in natural_marker.findall(text):
+        try:
+            yield datetime.date(int(year), months[month], int(day))
+        except (KeyError, ValueError):
+            pass
+for raw_root in payload["roots"]:
+    root = os.path.expanduser(raw_root)
+    if not os.path.isdir(root):
+        continue
+    for directory, _, names in os.walk(root):
+        for name in names:
+            path = os.path.join(directory, name)
+            if os.path.splitext(name)[1].casefold() not in suffixes:
+                continue
+            if "agent-transcripts" not in path.split(os.sep):
+                continue
+            try:
+                modified = datetime.datetime.fromtimestamp(os.stat(path).st_mtime).date()
+                with open(path, "r", encoding="utf-8", errors="ignore") as handle:
+                    text = handle.read(8 * 1024 * 1024)
+            except OSError:
+                continue
+            if not any(keyword in text.casefold() for keyword in keywords):
+                continue
+            if not (start <= modified <= end or any(start <= item <= end for item in date_hits(text))):
+                continue
+            print(json.dumps({"path": path, "mtime": os.stat(path).st_mtime, "content": text[:240000]}, ensure_ascii=False))
+'''
+
+
+def configured_ssh_hosts(config_path: Path) -> list[str]:
+    hosts: list[str] = []
+    try:
+        lines = config_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return hosts
+    for line in lines:
+        match = re.match(r"\s*Host\s+(.+)", line, re.IGNORECASE)
+        if not match:
+            continue
+        for host in match.group(1).split():
+            if "*" not in host and "?" not in host and "!" not in host:
+                hosts.append(host)
+    return list(dict.fromkeys(hosts))
+
+
+def collect_remote_cursor(
+    hosts: Iterable[str],
+    config_path: Path,
+    roots: list[str],
+    start_at: datetime,
+    end_at: datetime,
+    keywords: tuple[str, ...],
+) -> tuple[list[Session], list[str]]:
+    sessions: list[Session] = []
+    warnings: list[str] = []
+    payload = json.dumps(
+        {
+            "start": str(start_at.date()),
+            "end": str(end_at.date()),
+            "keywords": keywords,
+            "roots": roots,
+        },
+        ensure_ascii=False,
+    )
+    for host in hosts:
+        command = [
+            "ssh",
+            "-F",
+            str(config_path),
+            "-o",
+            "BatchMode=yes",
+            "-o",
+            "ConnectTimeout=6",
+            "-o",
+            "ClearAllForwardings=yes",
+            host,
+            "python3 -c " + shlex.quote(REMOTE_CURSOR_SCRIPT),
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                input=payload,
+                text=True,
+                capture_output=True,
+                timeout=30,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            warnings.append(f"{host}: remote Cursor scan failed ({error})")
+            continue
+        if result.returncode != 0:
+            detail = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "unavailable"
+            warnings.append(f"{host}: remote Cursor scan failed ({detail})")
+            continue
+        for line in result.stdout.splitlines():
+            try:
+                item = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            path = str(item.get("path") or "")
+            content = item.get("content")
+            if not path or not isinstance(content, str):
+                continue
+            session = read_cursor_file(
+                Path(path),
+                host,
+                start_at,
+                end_at,
+                keywords,
+                content_override=content,
+                modified_override=float(item.get("mtime") or 0),
+            )
+            if session is not None:
+                sessions.append(session)
+    return sessions, warnings
+
+
 def normalize_for_fingerprint(text: str) -> str:
     return " ".join(text.split()).strip().lower()
 
@@ -200,6 +573,8 @@ def shared_prefix_length(left: list[str], right: list[str]) -> int:
 
 
 def transcripts_overlap(left: Session, right: Session) -> bool:
+    if left.source == right.source == "cursor" and left.session_id == right.session_id:
+        return True
     left_requests = user_sequence(left)
     right_requests = user_sequence(right)
     if left_requests == right_requests:
@@ -283,15 +658,21 @@ def render_markdown(
         f"- Duplicate or overlapping transcript histories merged: `{removed}`",
         "",
     ]
+    warnings = getattr(args, "collection_warnings", [])
+    if warnings:
+        lines.extend(["- Source access warnings:", *[f"  - {item}" for item in warnings], ""])
     for session in sessions:
         lines.extend(
             [
                 f"## {session.title}",
                 "",
+                f"- Source: `{session.source}`",
                 f"- Session: `{session.session_id}`",
-                f"- Working directory: `{session.cwd or 'unknown'}`",
+                f"- Working directory or project: `{session.cwd or 'unknown'}`",
             ]
         )
+        if session.source_path:
+            lines.append(f"- Transcript path: `{session.source_path}`")
         if session.models:
             lines.append("- Models/providers observed: " + ", ".join(f"`{item}`" for item in session.models))
         if session.duplicates:
@@ -327,6 +708,7 @@ def render_json(
         "timezone": args.timezone,
         "unique_session_count": len(sessions),
         "duplicate_session_count": removed,
+        "source_access_warnings": getattr(args, "collection_warnings", []),
         "sessions": [],
     }
     for session in sessions:
@@ -335,6 +717,8 @@ def render_json(
         payload["sessions"].append(
             {
                 "id": session.session_id,
+                "source": session.source,
+                "source_path": session.source_path,
                 "title": session.title,
                 "cwd": session.cwd,
                 "duplicate_ids": session.duplicates,
@@ -370,6 +754,30 @@ def main() -> int:
         session = read_session(path, titles, start_at, end_at)
         if session is not None:
             sessions.append(session)
+    collection_warnings: list[str] = []
+    if args.include_cursor:
+        cursor_roots = [Path(item).expanduser() for item in args.cursor_root]
+        if not cursor_roots:
+            cursor_roots = default_cursor_roots()
+        sessions.extend(
+            collect_local_cursor(cursor_roots, start_at, end_at, semantic_keywords(args))
+        )
+        remote_hosts = list(args.remote_host)
+        if args.all_ssh_hosts:
+            remote_hosts.extend(configured_ssh_hosts(Path(args.ssh_config).expanduser()))
+        remote_hosts = list(dict.fromkeys(remote_hosts))
+        if remote_hosts:
+            remote_sessions, remote_warnings = collect_remote_cursor(
+                remote_hosts,
+                Path(args.ssh_config).expanduser(),
+                args.remote_cursor_root,
+                start_at,
+                end_at,
+                semantic_keywords(args),
+            )
+            sessions.extend(remote_sessions)
+            collection_warnings.extend(remote_warnings)
+    args.collection_warnings = collection_warnings
     sessions, removed = deduplicate(sessions)
     content = (
         render_markdown(sessions, removed, args)

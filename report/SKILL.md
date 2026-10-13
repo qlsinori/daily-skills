@@ -1,6 +1,6 @@
 ---
 name: report
-description: Summarize work completed during a recent date range by reading all matching local Codex session transcripts, not only the current conversation. Use when the user invokes /report or $report, asks for a daily, multi-day, weekly, monthly, or custom-range work report, or wants recent Codex-assisted work consolidated with duplicate sessions removed and organized by importance, difficulty, actions, and outcomes.
+description: Summarize work completed during a recent date range by reading matching local Codex and Cursor transcripts plus semantic-map work evidence on configured SSH servers, not only the current conversation. Use when the user invokes /report or $report, asks for a daily, multi-day, weekly, monthly, or custom-range work report, or wants recent Codex/Cursor-assisted work consolidated with duplicate sessions removed and organized by importance, difficulty, actions, and outcomes.
 ---
 
 # Work Report
@@ -17,29 +17,37 @@ Build an evidence-based work report from the user's local Codex session history.
 
 ## Collect the complete history
 
-Run `scripts/collect_work_history.py` from this skill directory with the resolved dates and timezone. Start with the digest Markdown format:
+Run `scripts/collect_work_history.py` from this skill directory with the resolved dates and timezone. Start with the digest Markdown format. The default report invocation also enables the Cursor collector:
 
 ```bash
 python3 <skill-directory>/scripts/collect_work_history.py \
   --start YYYY-MM-DD \
   --end YYYY-MM-DD \
   --timezone Area/City \
+  --include-cursor \
+  --cursor-root ~/.cursor/projects \
+  --all-ssh-hosts \
+  --ssh-config ~/.ssh/config \
   --format markdown \
   --output <temporary-directory>/work-history.md
 ```
 
-The script reads only `~/.codex/session_index.jsonl` and `~/.codex/sessions/**/*.jsonl`. Never read `auth.json`, configuration secrets, shell history, unrelated documents, email, calendar, or chat applications unless they are covered by the default data-source profile below or the user explicitly adds them.
+The script reads the local Codex index and sessions, local Cursor agent transcripts under `~/.cursor/projects/**/agent-transcripts/`, and matching remote Cursor agent transcripts from every concrete `Host` in the configured SSH file. Remote roots default to `~/.cursor/projects` and `~/.codex/sessions`; pass `--remote-cursor-root` to add a known server-side transcript root. Cursor collection is restricted to `.jsonl`, `.md`, and `.txt` files under `agent-transcripts` whose content matches semantic-map keywords and whose file timestamp or embedded date falls in the report range. It does not read Cursor caches, terminal dumps, agent-tool logs, databases, `auth.json`, configuration secrets, shell history, unrelated documents, email, calendar, or chat applications unless the user explicitly adds them.
+
+The remote scan is read-only and uses non-interactive SSH with a short connection timeout. Every inaccessible host is listed as an access limitation rather than treated as evidence. SSH aliases pointing to the same server may produce mirrored records; merge those records with the normal duplicate-session pass. “All servers” means all concrete hosts visible in the selected SSH config, not arbitrary network discovery.
 
 ## Default data-source profile
 
 For this user, the following sources are part of the default report scope and do not need to be restated for every report request:
 
 - **Local Codex history:** all matching local Codex sessions in the requested date range, including sessions routed through CC-Switch providers such as DeepSeek or Kimi. These are normally stored in the same `~/.codex/sessions/**/*.jsonl` tree; identify the provider from session turn metadata rather than assuming a separate transcript directory.
+- **Local Cursor history:** matching Cursor agent transcripts under `~/.cursor/projects/**/agent-transcripts/`, including the semantic-map service work performed from memory-module worktrees. Read user requests and outcome-bearing assistant text; ignore terminal/tool chatter unless it is the only evidence of a material result.
 - **CC-Switch metadata:** inspect `~/.cc-switch/logs/` read-only only to confirm provider routing and time coverage. Treat these logs as routing metadata, not as independent work evidence; do not expose keys, request payloads, or credentials.
 - **Remote SSH work context:** the SSH-accessible project directories, logs, commits, task notes, and Codex/session records related to the user's ongoing work. Inspect read-only and select only material relevant to the report period and project themes.
+- **Remote Cursor history:** on every concrete SSH host from the selected config, inspect the server-side Cursor agent-transcript roots for semantic-map service work. Search terms include `语义地图`, `语义建图`, `semantic map`, `semantic_mapping`, `memory_module`, `hydra_custom`, `mapdb`, and `建图服务`; add project-specific terms with `--semantic-keyword` when needed.
 - **Feishu semantic-map and annotation context:** the user's relevant Feishu group conversations, documents, Wiki pages, and linked project materials concerning semantic mapping, annotation, dataset quality, and related delivery work. The standing context includes `语义地图建图专项测试`, `语义建图小组`, `语义地图-目标检测-图片标注任务`, the daily-report Wiki, and the semantic-map operating guide; follow related links and conversation history when accessible.
 
-Use this default source profile automatically. Do not ask the user to repeat these sources. The user can narrow or override it with instructions such as “只看本地会话” or “不读取飞书”。 If a default source is unavailable, partially accessible, or contains only requests without completion evidence, state that limitation and do not fill the gap by inference. Merge duplicate reports or mirrored session tails across local, remote, and Feishu sources while retaining unique implementation evidence.
+Use this default source profile automatically. Do not ask the user to repeat these sources. The user can narrow or override it with instructions such as “只看本地会话” or “不读取飞书”。 If a default source is unavailable, partially accessible, or contains only requests without completion evidence, state that limitation and do not fill the gap by inference. Merge duplicate reports or mirrored session tails across local Cursor, remote Cursor, Codex, and Feishu sources while retaining unique implementation evidence.
 
 Do not search unrelated chats, other people's private conversations, or unrelated server directories. Other linked sources are included only when the user names them or provides a link and the available connector/authentication can access them.
 
@@ -48,6 +56,8 @@ Inspect every included session. Use `--session-id <id>` to produce a focused ext
 When the user mentions DeepSeek, Kimi, CC-Switch, or another alternate model, search both Codex session metadata and the local CC-Switch logs. Merge alternate-model transcripts with their Codex session by session ID and timestamp; never count a CC-Switch request log as a separate session or as completion evidence.
 
 Treat the current conversation as one of the sessions, not as the sole source. Report the number of source sessions and exact date range. Merge duplicated transcript history from resumed or forked conversations while preserving each branch's unique tail. Retain separate sessions that merely cover the same project.
+
+When a report includes Cursor records, identify the source (`Cursor local` or the SSH host), the transcript path, and the project/worktree when available. Treat Cursor compaction summaries as historical evidence from the same root task, merge them with the root transcript when their copied prefix matches, and do not count a compaction segment as an independent work item.
 
 ## Build a session coverage ledger
 
