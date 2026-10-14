@@ -59,6 +59,26 @@ Treat the current conversation as one of the sessions, not as the sole source. R
 
 When a report includes Cursor records, identify the source (`Cursor local` or the SSH host), the transcript path, and the project/worktree when available. Treat Cursor compaction summaries as historical evidence from the same root task, merge them with the root transcript when their copied prefix matches, and do not count a compaction segment as an independent work item.
 
+## Split work at the task level
+
+A session is an evidence container, not a report item. Split one session into separate tasks whenever the user changes the work object, repository/module, target service or server, acceptance criterion, or requested outcome. A single Cursor session may therefore produce several report items. For example, a session containing “语义地图适配 ex002”“Benchmark 场景可视化”“评测结果分析” and “地图编辑多源版本可视化” must produce four task entries, with their own actions, evidence, status, and source label.
+
+Build the task ledger before drafting. Each row records the task title, source label, session ID, transcript path, project/worktree, target host or service, user request, completion evidence, status, and report disposition. Keep copied prefixes together but preserve distinct tails when a resumed or forked session contains separate tasks. A task that has only a request remains “请求中” or “进行中”; do not let a completed neighboring task make it look completed.
+
+Read every in-range turn, not just the last requests or final replies. Digest shortening affects individual message length only; use full text to resolve omissions. For long Cursor sessions, inspect the dated user turn and its subsequent assistant outcomes together. File modification time and compaction creation time do not prove that every historical task happened in this period; label undated summaries as historical context and verify outcomes in original turns. Preserve ongoing follow-up separately from work completed before the period.
+
+Every task entry must show its source explicitly in the title or first sentence using one of these labels:
+
+- `Codex·本地` for a local Codex transcript.
+- `Codex·<IP 或主机>` for Codex/session or project evidence read through a remote host.
+- `Cursor·本地` for local Cursor agent transcripts.
+- `Cursor·<IP 或主机>` for Cursor transcripts read on a remote server.
+- `飞书·<群聊或文档>` for a Feishu conversation or document.
+
+If duplicate copies from multiple sources describe the same task, retain all confirmed source labels, for example `来源：Cursor·本地；Cursor·10.136.27.172`, and merge the evidence once. Do not write only “来源：Cursor” or “来源：远程”，because that hides whether the work came from the local machine or a specific server. The generated digest includes source labels at the session level; the final report must carry them down to each split task.
+
+Source means where the evidence was read, while target means where the work ran or was deployed. A local Cursor session deploying to 10.136.29.157 is `来源：Cursor·本地；目标：10.136.29.157`, not `Cursor·10.136.29.157`. Include the source on every independent numbered item and every workload-bearing subitem; a parent theme's source does not cover children from other tools. Keep a short session ID or evidence link beside each task when needed for traceability. A task may have several sources; do not infer remote provenance merely from an IP mentioned in local text.
+
 ## Build a session coverage ledger
 
 Before drafting, build a private coverage ledger with one row per unique session or resumed/forked root thread in scope. Record the source, session ID, date range, title, user requests, work object, completion evidence, status, and report disposition.
@@ -108,6 +128,8 @@ For every main item, cover these four points in cohesive prose:
 2. Why it matters.
 3. What made it difficult.
 4. How it was handled and what result was verified.
+
+Add the task source and status to the same paragraph, for example: “来源：`Cursor·本地`；状态：已完成。” For a task backed by more than one transcript, list the concrete local/remote labels and keep the session IDs in the source note.
 
 Use this fixed reasoning order when drafting each item: **why the work was needed → why it mattered → why it took time or was difficult → how it was handled → what changed after the work**. Lead with the project value and the verified result; do not lead with a release number, commit hash, raw test count, or a string of implementation telemetry. Keep those details only when they are needed to support the result.
 

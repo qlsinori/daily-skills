@@ -42,6 +42,8 @@ class Session:
     duplicates: list[str] = field(default_factory=list)
     source: str = "codex"
     source_path: str = ""
+    source_labels: list[str] = field(default_factory=list)
+    evidence_paths: list[str] = field(default_factory=list)
 
     @property
     def user_messages(self) -> list[Message]:
@@ -175,7 +177,12 @@ def infer_id(path: Path) -> str:
 def read_session(
     path: Path, titles: dict[str, str], start_at: datetime, end_at: datetime
 ) -> Session | None:
-    session = Session(session_id=infer_id(path), path=path)
+    session = Session(
+        session_id=infer_id(path),
+        path=path,
+        source_labels=["Codex·本地"],
+        evidence_paths=[str(path)],
+    )
     try:
         handle = path.open(encoding="utf-8")
     except OSError:
@@ -283,11 +290,18 @@ def in_date_range(
 def cursor_message_timestamp(
     text: str, fallback: datetime, start_at: datetime, end_at: datetime
 ) -> datetime:
-    for candidate in marker_dates(text):
-        # A transcript may quote older work. Prefer a marker inside the report
-        # window and otherwise use the file timestamp as the best evidence.
-        if start_at.date() <= candidate <= end_at.date():
-            return datetime.combine(candidate, time.min, fallback.tzinfo)
+    # Only the message's explicit timestamp dates the work. Dates mentioned in
+    # prose may describe a dataset, release, or quoted historical work.
+    marker = re.search(r"<timestamp>(.*?)</timestamp>", text, re.DOTALL)
+    if marker:
+        raw = marker.group(1).strip()
+        try:
+            parsed = datetime.strptime(raw.split(" (UTC")[0], "%A, %b %d, %Y, %I:%M %p")
+            return parsed.replace(tzinfo=fallback.tzinfo)
+        except ValueError:
+            candidates = marker_dates(marker.group(0))
+            if candidates:
+                return datetime.combine(candidates[0], time.min, fallback.tzinfo)
     return fallback
 
 
@@ -353,6 +367,7 @@ def read_cursor_file(
 
     messages: list[Message] = []
     if path.suffix.casefold() == ".jsonl":
+        turn_timestamp = modified_at
         for line in content.splitlines():
             try:
                 item = json.loads(line)
@@ -364,7 +379,12 @@ def read_cursor_file(
             text_value = cursor_text_from_item(item)
             if not text_value:
                 continue
-            timestamp = cursor_message_timestamp(text_value, modified_at, start_at, end_at)
+            explicit = parse_timestamp(item.get("timestamp"))
+            if explicit is not None:
+                turn_timestamp = explicit.astimezone(start_at.tzinfo)
+            if role == "user":
+                turn_timestamp = cursor_message_timestamp(text_value, turn_timestamp, start_at, end_at)
+            timestamp = turn_timestamp
             if not (start_at <= timestamp <= end_at):
                 continue
             messages.append(
@@ -387,12 +407,10 @@ def read_cursor_file(
     if not messages:
         return None
 
-    # Cursor transcripts contain progress/tool chatter. Keep the requests and
-    # the most recent outcome evidence in the digest while preserving full mode.
-    user_messages = [item for item in messages if item.role == "user"][-20:]
-    assistant_messages = [item for item in messages if item.role == "assistant"][-8:]
-    kept = sorted(user_messages + assistant_messages, key=lambda item: item.timestamp)
+    # Preserve every turn. Tail-only selection hides earlier independent tasks.
+    kept = messages
     session_id = cursor_session_id(Path(path), source)
+    label = "Cursor·本地" if source == "local" else f"Cursor·{source}"
     return Session(
         session_id=session_id,
         path=Path(path),
@@ -401,6 +419,8 @@ def read_cursor_file(
         messages=kept,
         source="cursor",
         source_path=str(path),
+        source_labels=[label],
+        evidence_paths=[str(path)],
     )
 
 
@@ -456,14 +476,14 @@ for raw_root in payload["roots"]:
             try:
                 modified = datetime.datetime.fromtimestamp(os.stat(path).st_mtime).date()
                 with open(path, "r", encoding="utf-8", errors="ignore") as handle:
-                    text = handle.read(8 * 1024 * 1024)
+                    text = handle.read()
             except OSError:
                 continue
             if not any(keyword in text.casefold() for keyword in keywords):
                 continue
             if not (start <= modified <= end or any(start <= item <= end for item in date_hits(text))):
                 continue
-            print(json.dumps({"path": path, "mtime": os.stat(path).st_mtime, "content": text[:240000]}, ensure_ascii=False))
+            print(json.dumps({"path": path, "mtime": os.stat(path).st_mtime, "content": text}, ensure_ascii=False))
 '''
 
 
@@ -573,7 +593,7 @@ def shared_prefix_length(left: list[str], right: list[str]) -> int:
 
 
 def transcripts_overlap(left: Session, right: Session) -> bool:
-    if left.source == right.source == "cursor" and left.session_id == right.session_id:
+    if left.source == right.source and left.session_id == right.session_id:
         return True
     left_requests = user_sequence(left)
     right_requests = user_sequence(right)
@@ -611,6 +631,12 @@ def merge_sessions(left: Session, right: Session) -> Session:
     ]
     canonical.messages = merged_messages
     canonical.duplicates = list(dict.fromkeys(merged_ids))
+    canonical.source_labels = list(
+        dict.fromkeys([*canonical.source_labels, *secondary.source_labels])
+    )
+    canonical.evidence_paths = list(
+        dict.fromkeys([*canonical.evidence_paths, *secondary.evidence_paths])
+    )
     return canonical
 
 
@@ -666,13 +692,15 @@ def render_markdown(
             [
                 f"## {session.title}",
                 "",
-                f"- Source: `{session.source}`",
+                f"- Source: `{', '.join(session.source_labels or [session.source])}`",
                 f"- Session: `{session.session_id}`",
                 f"- Working directory or project: `{session.cwd or 'unknown'}`",
             ]
         )
         if session.source_path:
             lines.append(f"- Transcript path: `{session.source_path}`")
+        if session.evidence_paths:
+            lines.append("- Evidence paths: " + ", ".join(f"`{path}`" for path in session.evidence_paths))
         if session.models:
             lines.append("- Models/providers observed: " + ", ".join(f"`{item}`" for item in session.models))
         if session.duplicates:
@@ -718,6 +746,8 @@ def render_json(
             {
                 "id": session.session_id,
                 "source": session.source,
+                "sources": session.source_labels or [session.source],
+                "evidence_paths": session.evidence_paths,
                 "source_path": session.source_path,
                 "title": session.title,
                 "cwd": session.cwd,
