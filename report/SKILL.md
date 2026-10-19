@@ -63,13 +63,17 @@ When a report includes Cursor records, identify the source (`Cursor local` or th
 
 For each reported work item, retain its actual evidence source: `Codex·本地`, `Codex·<IP 或主机>`, `Cursor·本地`, `Cursor·<IP 或主机>`, or `飞书·<群聊或文档>`. A source label is an evidence annotation, not a replacement for the original detailed work narrative. Include the applicable source beside each independent item or workload-bearing subitem, and retain session IDs and transcript paths in the private ledger or source note.
 
+For AI-assisted work, append the verified model to the tool/location label in the report body, for example `来源：Codex·本地（DeepSeek V4 Flash / deepseek-v4-flash）；目标：10.136.29.157`. Codex/Cursor identifies the client, not the model provider. Do not collapse DeepSeek, Kimi, or other verified models into a bare `Codex·本地` label or mention them only in the final source note. Use the recorded model identifier when no reliable display name is available; if model metadata is unavailable, write `模型未核实` rather than infer GPT from the client name.
+
+Attribute the model at the work-item/turn level: associate the implementation and outcome with the applicable turn metadata, not every model ever observed in the session. For mixed-model themes, label each workload-bearing subitem separately; when several models actually contributed to one item, retain their verified contributions without counting the work twice. Keep implementation, independent review, and later deployment/verification attribution distinct. Session-wide model lists and CC-Switch routing logs are discovery aids, not proof that a model completed every task in that session. Inspect the original transcript when the collector digest does not establish this mapping.
+
 Distinguish transcript location from execution/deployment target. For example, a local Cursor transcript deploying to 10.136.29.157 is `来源：Cursor·本地；目标：10.136.29.157`; an IP mentioned in local text does not prove the transcript came from that server. When duplicate evidence is read from multiple confirmed locations, preserve those source labels and merge the work once. Resolve SSH aliases to the actual host where available.
 
 Read every date-matching Cursor turn, not only the transcript tail. Associate assistant outcomes with the preceding dated user turn. File modification time and compaction creation time are discovery hints, not proof that all historical work happened in the report period; verify claims against original turns and disclose undated or inaccessible evidence. Compaction segments belong to their root session, while unique branch evidence must be preserved.
 
 ## Build a session coverage ledger
 
-Before drafting, build a private coverage ledger with one row per unique session or resumed/forked root thread in scope. Record the source, session ID, date range, title, user requests, work object, completion evidence, status, and report disposition.
+Before drafting, build a private coverage ledger with one row per unique session or resumed/forked root thread in scope. Record the source, session ID, date range, title, user requests, work object, completion evidence, status, and report disposition. Within each row, retain the work-item-to-model mapping and supporting turn timestamps; distinguish an observed model ID from a separately verified routing provider.
 
 - Inspect all user messages and all assistant final answers. Also inspect commentary or progress messages containing completed actions, fixes, deployment results, test results, or changed decisions; final outcomes alone are not sufficient.
 - Inspect each large session in date order and extract its per-turn outcomes before clustering themes.
@@ -78,6 +82,7 @@ Before drafting, build a private coverage ledger with one row per unique session
 - Include small completed items under the relevant parent theme with `已修复：`, `已处理：`, or `已补齐：` lists. Do not let thematic compression hide distinct completed problems.
 - Record a specific exclusion reason for every non-trivial session that does not produce a report item, such as greeting only, request without evidence, duplicate transcript, unrelated personal support, or inaccessible source.
 - Do not finalize the report while any non-trivial session has no disposition. Reconcile the ledger against the report and source note before drafting.
+- Before finalizing, reconcile every included work item's verified model with its body-level source label. A source note saying “含 DeepSeek/Kimi” does not satisfy item-level attribution. When correcting an earlier report, update the affected item labels and ledger while preserving the detailed work narrative, status, and unrelated themes; do not reassign a whole theme merely because one follow-up used a different model.
 
 The coverage ledger is an internal audit artifact; do not paste it into the report unless the user asks for it.
 
