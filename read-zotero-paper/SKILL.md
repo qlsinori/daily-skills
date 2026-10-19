@@ -1,6 +1,6 @@
 ---
 name: read-zotero-paper
-description: Read, critically analyze, annotate, and archive academic PDFs from Zotero storage. Use when a user provides a Zotero item directory or PDF and asks to read, summarize, critique, organize, archive, highlight, add Chinese annotations, or embed selected original paper figures in notes. Produce an evidence-based Chinese Markdown note and, when requested or useful, paper-figure crops or a polished Zotero-readable annotated PDF without modifying Zotero-managed originals or its database.
+description: Read, critically analyze, annotate, and archive academic PDFs from Zotero storage. Use when a user provides a paper title, DOI, arXiv identifier, URL, Zotero item directory, or PDF and asks to read, summarize, critique, organize, archive, highlight, add Chinese annotations, or embed selected original paper figures in notes. Automatically find and acquire missing papers from authoritative sources, archive them locally, and import them into Zotero through supported interfaces when available. Produce an evidence-based Chinese Markdown note and, when requested or useful, paper-figure crops or a polished Zotero-readable annotated PDF without modifying Zotero-managed originals or its database.
 ---
 
 # 精读、批注并归档 Zotero 论文
@@ -10,6 +10,17 @@ description: Read, critically analyze, annotate, and archive academic PDFs from 
 ## 工作流
 
 ### 1. 检查来源
+
+#### 仅有题名/链接或本地缺失时：先补齐论文，再继续阅读
+
+- 先按标题、正式简称、DOI/arXiv ID 检索本地 `storage/`、`读论文/` 和可用的 Zotero 查询接口。可只读查询 `zotero.sqlite` 的书目与附件元数据；不得直接写入数据库。已有条目但缺附件时补齐附件，不重复建条目。
+- 找不到论文时，自动检索出版社、arXiv、作者主页或官方项目仓库，核对正式题名、作者、标识符与版本。用户给出的可能是项目描述而非题名，须通过官方项目引用确认对应论文。仅在存在无法消除的同名歧义时询问用户。
+- 从合法公开的权威来源下载完整 PDF 到 `读论文/<论文简称>/`，核对 PDF 可打开、首页身份与页数，并记录来源 URL、版本、获取日期和 SHA-256。已有文件先查重，不覆盖不同版本。不要因本地没有论文就要求用户先下载或停止任务。
+- 用户使用本 skill 阅读缺失论文时，默认继续完成获取、归档和 Zotero 导入，无需重复询问是否添加。优先使用可用连接器、Zotero 官方 API 或客户端支持的导入接口创建书目并附加 PDF；不手工伪造 `storage` 条目目录，不直接改库。仅在可写的个人库或用户指定位置导入；不擅自选共享群组库。
+- 导入后读回标题、标识符和 PDF 附件，确认成功。若接口不可用或缺少授权，先保留本地 PDF、生成可导入的 RIS/BibTeX，并继续精读；交付时准确区分“本地已归档”和“已加入 Zotero”，说明未完成的导入步骤，不把落盘等同于入库。
+- 若公开全文仍不可获得，记录已核对的权威来源与具体阻碍，再请用户提供全文或访问方式；不得绕过付费访问限制，也不得以摘要伪称全文精读。
+
+#### 已定位本地全文
 
 - 只读列出用户提供的目录，识别主论文、补充材料、网页快照和 Zotero 标记文件。
 - 多个 PDF 并存时，根据文件名、元数据和首页判断主论文；证据仍不足时再询问。
@@ -109,4 +120,4 @@ Markdown 数学公式使用常见预览器兼容的分隔符：行内公式写�
 - 扫描版或乱码 PDF 无法可靠定位原文时，先 OCR 生成可搜索副本，再对副本批注，并明确标注该限制。
 - 旋转页、跨栏或跨页片段匹配不准时，缩短为同一行或同一段内的唯一片段；禁止用大矩形猜测位置。
 - 批注写入失败时保留原始 PDF 和 Markdown，报告失败项，不交付伪称完成的批注版。
-- 不用网页摘要替代缺失论文内容。只有用户要求时效核验或需核对外部书目信息时才浏览，并单独引用来源。
+- 不用网页摘要替代缺失论文内容。本地论文缺失时主动浏览以定位并获取完整论文；需要时效核验或外部书目信息核对时也可浏览，并单独引用来源。
