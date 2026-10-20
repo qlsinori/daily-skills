@@ -1,0 +1,4 @@
+interface:
+  display_name: "clean up"
+  short_description: "检测并释放 Deskflow 控制 Ubuntu 时卡住的键盘按键状态"
+  default_prompt: "使用 $clean-up 检测并释放这台 Ubuntu 上卡住的键盘按键状态。"
