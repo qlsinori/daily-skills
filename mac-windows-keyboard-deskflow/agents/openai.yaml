@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mac Windows 键盘与 Deskflow"
+  short_description: "配置 Mac 的 Windows 风格快捷键，排查 Deskflow 跨电脑按键冲突"
+  default_prompt: "使用 $mac-windows-keyboard-deskflow 配置我的 Mac 键盘，并验证本机及 Deskflow 远端快捷键。"

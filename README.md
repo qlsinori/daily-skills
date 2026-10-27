@@ -10,6 +10,7 @@
 | [`feishu-vln-project-summary`](feishu-vln-project-summary/) | 从飞书 Wiki 整理 VLN 项目经历和简历素材 |
 | [`karpathy-guidelines`](karpathy-guidelines/) | 编写、审查和重构代码时的简洁性与验证准则 |
 | [`lark-semantic-map-issue-extractor`](lark-semantic-map-issue-extractor/) | 从飞书测试群提取语义地图问题并增量更新文档 |
+| [`mac-windows-keyboard-deskflow`](mac-windows-keyboard-deskflow/) | 配置 Mac 的 Windows 风格快捷键，排查 Deskflow 跨电脑按键冲突 |
 | [`mapdb-project-development`](mapdb-project-development/) | MapDB 项目开发、数据保护、隔离测试与交付约束 |
 | [`mapdb-release-deploy`](mapdb-release-deploy/) | MapDB 版本发布、GitLab 标记、流水线和部署验证 |
 | [`mapdb-session-autorelease`](mapdb-session-autorelease/) | 调用一次启用 MapDB 持续发布：测试、同步 develop、Git SSH 推新 tag 并核验 157 |
