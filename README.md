@@ -8,6 +8,7 @@
 | --- | --- |
 | [`assist-code-reading`](assist-code-reading/) | 从代码入口追踪训练与推理链路，生成中文代码阅读材料 |
 | [`feishu-vln-project-summary`](feishu-vln-project-summary/) | 从飞书 Wiki 整理 VLN 项目经历和简历素材 |
+| [`frontend-design`](frontend-design/) | 前端视觉设计指导，来自 [anthropics/skills](https://github.com/anthropics/skills/tree/main/skills/frontend-design)，保留原始许可 |
 | [`karpathy-guidelines`](karpathy-guidelines/) | 编写、审查和重构代码时的简洁性与验证准则 |
 | [`lark-semantic-map-issue-extractor`](lark-semantic-map-issue-extractor/) | 从飞书测试群提取语义地图问题并增量更新文档 |
 | [`mac-windows-keyboard-deskflow`](mac-windows-keyboard-deskflow/) | 配置 Mac 的 Windows 风格快捷键，排查 Deskflow 跨电脑按键冲突 |
