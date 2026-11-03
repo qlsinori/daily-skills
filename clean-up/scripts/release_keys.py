@@ -8,10 +8,30 @@ import sys
 import time
 
 
+def observe(pressed, initial, seconds, clock=time.monotonic, sleep=time.sleep):
+    """Observe without injecting events; preserve even transient pressed states."""
+    started = clock()
+    after = initial
+    seen = {key['keycode']: key for key in initial}
+    changes = []
+    while clock() - started < seconds:
+        sleep(min(0.2, max(0, seconds - (clock() - started))))
+        current = pressed()
+        seen.update((key['keycode'], key) for key in current)
+        if current != after:
+            changes.append({'elapsed_seconds': round(clock() - started, 3), 'pressed': current})
+        after = current
+    return after, list(seen.values()), changes
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--release', action='store_true')
+    parser.add_argument('--watch-seconds', type=float, default=5.0,
+                        help='Observation after a release attempt (0–30 seconds; default: 5). Keep all keys released.')
     args = parser.parse_args()
+    if not 0 <= args.watch_seconds <= 30:
+        parser.error('--watch-seconds must be between 0 and 30')
     if sys.platform != 'linux' or os.environ.get('XDG_SESSION_TYPE', '').lower() != 'x11':
         raise RuntimeError('Requires a confirmed native Linux X11 session (XDG_SESSION_TYPE=x11).')
     if not os.environ.get('DISPLAY'):
@@ -57,8 +77,21 @@ def main():
             x.XSync(display, 0)
             time.sleep(0.2)
         report['after'] = pressed()
+        if args.release:
+            report['immediate_after'] = report['after']
+            after, seen, changes = observe(pressed, report['after'], args.watch_seconds)
+            report.update(after=after, observed_pressed=seen, changes=changes,
+                          watch_seconds=args.watch_seconds)
+            if seen:
+                report['status'] = 'pressed_during_observation'
+                report['next_step'] = ('If all keys were released, manually Stop → Start Deskflow on the controller; '
+                                       'then query and, if needed, release once. Do not loop releases. '
+                                       'If this already followed a reconnect, stop releasing and inspect input sources/logs.')
+            else:
+                report['status'] = 'clear_during_observation' if before else 'no_pressed_keys_detected'
+                report['next_step'] = 'Try typing and confirm recovery; a clear observation window does not guarantee no later recurrence.'
         print(json.dumps(report, ensure_ascii=False, indent=2))
-        return 2 if args.release and report['after'] else 0
+        return 2 if args.release and report['observed_pressed'] else 0
     finally:
         x.XCloseDisplay(display)
 

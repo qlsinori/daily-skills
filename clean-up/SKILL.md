@@ -11,8 +11,8 @@ description: 清除 Deskflow 控制 Ubuntu/X11 时卡住的键盘按下状态。
 
 1. 确认执行环境是出问题的 Ubuntu 接收端的图形会话。不要默认 SSH 所在机器就是目标，不要猜测 DISPLAY 或使用 sudo。目标不明确时先澄清。
 2. 提示用户“请暂时松开所有键，我会检测并清除残留按键状态”。
-3. 在 skill 目录运行 `python3 scripts/release_keys.py --release`。脚本输出按下键的 keycode、名称、释放列表和复查结果。仅查询时使用 `python3 scripts/release_keys.py`。
-4. 释放后再运行一次仅查询，区分即时释放成功与状态再次出现；邀请用户试打字，以用户确认作为实际恢复的依据。没有检测到按下键时，不宣称已修复。释放后仍有按键或用户反馈复发时，进入下方流程，不循环释放。
+3. 在 skill 目录运行 `python3 scripts/release_keys.py --release`。脚本只释放一次，随后默认持续观察 5 秒；这期间请保持所有键松开。输出按下键的 keycode、名称、释放列表、即时结果、观察期状态变化及下一步建议。可用 `--watch-seconds 10` 延长观察（范围 0–30 秒）；仅查询时使用 `python3 scripts/release_keys.py`。
+4. 释放后再运行一次仅查询。`status=pressed_during_observation` 或退出码 2 表示观察期间出现按下键（即使最终为空），松开所有键的前提下按复发处理；`clear_during_observation` 只说明观察窗口内为空，不保证之后不复发；邀请用户试打字，以用户确认作为实际恢复的依据。没有检测到按下键时，不宣称已修复。释放后仍有按键或用户反馈复发时，进入下方流程，不循环释放。
 
 脚本仅支持 Linux 原生 X11；Wayland 的 XWayland 查询不能代表整个桌面的输入状态，遇到 Wayland 或无法打开显示时停止此修复路径并说明原因。不得自动重启 Deskflow、终止进程、改映射、修改截图快捷键或安装依赖。
 
