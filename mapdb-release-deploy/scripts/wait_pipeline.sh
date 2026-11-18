@@ -2,7 +2,7 @@
 set -euo pipefail
 
 TAG=${1:?usage: wait_pipeline.sh vX.Y.Z}
-API=${MAPDB_GITLAB_API:-http://10.100.10.12/api/v4}
+API=${MAPDB_GITLAB_API:-https://gitlab.x2robot.com/api/v4}
 PROJECT=${MAPDB_GITLAB_PROJECT:-echo%2Fmemory_module}
 TOKEN_FILE=${MAPDB_GITLAB_TOKEN_FILE:-$HOME/.config/gitlab/mapdb_api_token}
 TIMEOUT_S=${MAPDB_PIPELINE_TIMEOUT_S:-21600}

@@ -14,6 +14,7 @@ FILES = (
     "scripts/wait_pipeline.sh",
     "scripts/verify_production.sh",
     "scripts/sync_release_skill.py",
+    "scripts/check_merged_overwrite.py",
 )
 SECRET_PATTERN = re.compile(
     r"-----BEGIN (?:[A-Z0-9 ]+ )?PRIVATE KEY-----"

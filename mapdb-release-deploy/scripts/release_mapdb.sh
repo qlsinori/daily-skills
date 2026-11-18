@@ -74,6 +74,15 @@ if git -C "$RELEASE_REPO" rev-parse "$TAG" >/dev/null 2>&1 \
     exit 2
 fi
 
+# Merge requests land in develop independently of the active workspace; refuse
+# to sync any requested file whose active copy lacks those merged changes.
+guard_args=()
+for relative in "${PATHS[@]}"; do
+    guard_args+=(--path "$relative")
+done
+"$HYDRA_PY" "$(dirname "$0")/check_merged_overwrite.py" \
+    --active-root "$ACTIVE_ROOT" --repo "$RELEASE_REPO" "${guard_args[@]}"
+
 # Validate public notification copy before lengthy tests or any publication.
 "$HYDRA_PY" "$ACTIVE_ROOT/scripts/notify_mapdb_feishu.py" validate \
     --tag "$TAG" --changelog "$RELEASE_REPO/semantic_mapping/CHANGELOG.md"
@@ -88,7 +97,7 @@ import sys
 import urllib.request
 
 root, tag = sys.argv[1:]
-api = os.environ.get("MAPDB_GITLAB_API", "http://10.100.10.12/api/v4")
+api = os.environ.get("MAPDB_GITLAB_API", "https://gitlab.x2robot.com/api/v4")
 token_path = Path(os.environ.get("MAPDB_GITLAB_TOKEN_FILE", str(Path.home() / ".config/gitlab/mapdb_api_token")))
 request = urllib.request.Request(api.rstrip("/") + "/user", headers={"PRIVATE-TOKEN": token_path.read_text().strip()})
 with urllib.request.urlopen(request, timeout=15) as response:

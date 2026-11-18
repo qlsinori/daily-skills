@@ -13,7 +13,7 @@
 ## GitLab and deployment
 
 - GitLab project: `echo/memory_module`
-- API base: `http://10.100.10.12/api/v4`
+- API base: `https://gitlab.x2robot.com/api/v4`
 - Token file: `~/.config/gitlab/mapdb_api_token` (mode 600; never print)
 - Production SSH: `xchu@10.136.29.157`
 - Container: `semantic-mapdb`
